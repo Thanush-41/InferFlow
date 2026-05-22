@@ -116,8 +116,13 @@ class IngestionWorker:
         Used as a Starlette BackgroundTask in serverless mode (Vercel) so every
         API request opportunistically drains the queue without a dedicated worker.
         """
+        # Lazy connect: lifespan may not have run in serverless mode
         if not self.redis_client or not self.session_factory:
-            return 0
+            try:
+                await self.connect()
+            except Exception as e:
+                print(f"[IngestionWorker] drain_queue connect error: {e}")
+                return 0
         processed = 0
         for _ in range(batch_size):
             try:

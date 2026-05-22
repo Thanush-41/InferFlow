@@ -1,33 +1,18 @@
 """
 Vercel Python serverless entry point.
+
+handler must be a top-level unconditional assignment so Vercel's @vercel/python
+runtime can detect it as a serverless function.  lifespan="off" skips the async
+startup context; all service connections are established lazily on first use.
 """
 import sys
 import os
-import traceback
-from typing import Optional
 
-# Ensure the backend package is importable from the project root
-_backend_path = os.path.join(os.path.dirname(__file__), "..", "backend")
-sys.path.insert(0, _backend_path)
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
 
-_import_error: Optional[str] = None
+from mangum import Mangum
+from app.main import app  # FastAPI ASGI application
 
-try:
-    from mangum import Mangum
-    from app.main import app  # FastAPI ASGI application
-    handler = Mangum(app, lifespan="auto")
-except Exception as _exc:
-    _import_error = traceback.format_exc()
-    print(f"[api/index.py] IMPORT ERROR:\n{_import_error}")
-
-    # Fallback: return the traceback so the error is visible in Vercel logs/responses
-    from fastapi import FastAPI as _FastAPI
-    from mangum import Mangum as _Mangum
-
-    _err_app = _FastAPI()
-
-    @_err_app.get("/{path:path}")
-    async def _error(path: str = ""):
-        return {"error": "startup_import_failed", "detail": _import_error}
-
-    handler = _Mangum(_err_app, lifespan="off")
+# lifespan="off": FastAPI lifespan won't run on cold-start.
+# Connections (DB, Redis) are made lazily on the first request.
+handler = Mangum(app, lifespan="off")

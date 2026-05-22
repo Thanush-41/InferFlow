@@ -44,6 +44,22 @@ async def get_db() -> AsyncSession:
             await session.close()
 
 
+# ── Lazy one-time DB init (serverless: tables may not exist yet) ───────────────
+_db_initialized = False
+
+
 async def init_db():
+    global _db_initialized
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    _db_initialized = True
+
+
+async def get_db() -> AsyncSession:  # type: ignore[override]
+    if not _db_initialized:
+        await init_db()
+    async with async_session() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
