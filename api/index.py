@@ -73,14 +73,17 @@ class handler(BaseHTTPRequestHandler):
 
         try:
             result = _wsgi_app(environ, start_response)
+
+            # a2wsgi returns a lazy generator; start_response is called while
+            # iterating — so we must exhaust the body BEFORE reading status_holder.
+            response_body = b"".join(chunk for chunk in result if chunk)
+
             status_code = int(status_holder[0].split(" ", 1)[0]) if status_holder else 500
             self.send_response(status_code)
             for name, value in headers_holder:
                 self.send_header(name, value)
             self.end_headers()
-            for chunk in result:
-                if chunk:
-                    self.wfile.write(chunk)
+            self.wfile.write(response_body)
         except Exception as exc:
             import json
             payload = json.dumps({"error": str(exc)}).encode()
