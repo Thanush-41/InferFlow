@@ -13,10 +13,23 @@ from app.config import get_settings
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
-    await init_db()
-    await inference_logger.connect()
-    # Always connect the worker so drain_queue() is available for BackgroundTasks
-    await ingestion_worker.connect()
+
+    # Each step is wrapped so a single connection failure doesn't abort startup.
+    # Services that fail to connect will be re-attempted lazily on first use.
+    try:
+        await init_db()
+    except Exception as exc:
+        print(f"[lifespan] init_db failed (non-fatal): {exc}")
+
+    try:
+        await inference_logger.connect()
+    except Exception as exc:
+        print(f"[lifespan] inference_logger.connect failed (non-fatal): {exc}")
+
+    try:
+        await ingestion_worker.connect()
+    except Exception as exc:
+        print(f"[lifespan] ingestion_worker.connect failed (non-fatal): {exc}")
 
     # Background worker: runs in Docker/long-lived processes.
     # On Vercel (serverless), disable it — queue is drained by BackgroundTask instead.
