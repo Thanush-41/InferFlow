@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "outputDirectory": "frontend/dist",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/index" },
+    { "source": "/health",     "destination": "/api/index" }
+  ],
+  "functions": {
+    "api/index.py": {
+      "runtime": "python3.11",
+      "maxDuration": 30
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/ingest/process-queue",
+      "schedule": "* * * * *"
+    }
+  ]
+}

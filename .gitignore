@@ -1,0 +1,29 @@
+# .env — never commit secrets
+.env
+frontend/.env
+*.env
+!.env.example
+!frontend/.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+api/__pycache__/
+
+# Node
+node_modules/
+dist/
+
+# Docker
+postgres_data/
+
+# Vercel
+.vercel/
+
+# IDE
+.idea/
+.vscode/
+*.swp
