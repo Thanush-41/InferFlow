@@ -1,17 +1,18 @@
 """
-Vercel Python serverless entry point.
+Vercel Python serverless entry point — minimal smoke test.
 
-`handler` is an unconditional top-level assignment — @vercel/python's static
-analysis requires this.  The backend package is bundled via includeFiles in
-vercel.json so it is available at Lambda runtime.  lifespan="off" skips async
-startup; all service connections are lazy.
+If this works, we know Mangum+Vercel is compatible and the issue was
+in the backend import chain.  If this also fails we need a different adapter.
 """
-import sys
-import os
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
-
+from fastapi import FastAPI
 from mangum import Mangum
-from app.main import app  # FastAPI ASGI application
 
-handler = Mangum(app, lifespan="off")
+_app = FastAPI()
+
+
+@_app.get("/health")
+def _health():
+    return {"status": "healthy", "note": "minimal smoke test"}
+
+
+handler = Mangum(_app, lifespan="off")
