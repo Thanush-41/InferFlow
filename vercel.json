@@ -15,7 +15,7 @@
   "crons": [
     {
       "path": "/api/ingest/process-queue",
-      "schedule": "* * * * *"
+      "schedule": "0 * * * *"
     }
   ]
 }
