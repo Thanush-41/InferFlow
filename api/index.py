@@ -83,7 +83,8 @@ class handler(BaseHTTPRequestHandler):
             response_body = b"".join(chunk for chunk in result if chunk)
 
             status_code = int(status_holder[0].split(" ", 1)[0]) if status_holder else 500
-            print(f"[dispatch] status={status_code} body_len={len(response_body)}", flush=True)
+            print(f"[dispatch] status={status_code} body_len={len(response_body)} body={response_body[:200]!r}", flush=True)
+            print(f"[dispatch] resp_headers={headers_holder}", flush=True)
             self.send_response(status_code)
             for name, value in headers_holder:
                 self.send_header(name, value)
