@@ -15,9 +15,11 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     await init_db()
     await inference_logger.connect()
+    # Always connect the worker so drain_queue() is available for BackgroundTasks
+    await ingestion_worker.connect()
 
     # Background worker: runs in Docker/long-lived processes.
-    # On Vercel (serverless), disable it — queue is drained by the cron endpoint instead.
+    # On Vercel (serverless), disable it — queue is drained by BackgroundTask instead.
     worker_task = None
     if settings.background_worker_enabled:
         worker_task = asyncio.create_task(ingestion_worker.run())
@@ -31,6 +33,7 @@ async def lifespan(app: FastAPI):
             await worker_task
         except asyncio.CancelledError:
             pass
+    await ingestion_worker.disconnect()
     await inference_logger.disconnect()
 
 

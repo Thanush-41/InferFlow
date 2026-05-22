@@ -11,11 +11,5 @@
       "runtime": "python3.11",
       "maxDuration": 30
     }
-  },
-  "crons": [
-    {
-      "path": "/api/ingest/process-queue",
-      "schedule": "0 * * * *"
-    }
-  ]
+  }
 }

@@ -1,9 +1,11 @@
 import asyncio
 import json
+import ssl
 from datetime import datetime
 from typing import Optional
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.pool import NullPool
 from app.config import get_settings
 from app.models.schemas import InferenceLog
 from app.models.pydantic_models import InferenceLogPayload
@@ -25,7 +27,17 @@ class IngestionWorker:
 
     async def connect(self):
         self.redis_client = redis.from_url(self.settings.redis_url, decode_responses=True)
-        engine = create_async_engine(self.settings.database_url, echo=False)
+        # Mirror the same SSL/pool settings used by the main app engine
+        if self.settings.serverless_mode or self.settings.database_ssl_require:
+            _ssl_ctx = ssl.create_default_context()
+            engine = create_async_engine(
+                self.settings.database_url,
+                echo=False,
+                poolclass=NullPool,
+                connect_args={"ssl": _ssl_ctx, "statement_cache_size": 0},
+            )
+        else:
+            engine = create_async_engine(self.settings.database_url, echo=False)
         self.session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async def disconnect(self):
@@ -97,6 +109,27 @@ class IngestionWorker:
 
     def stop(self):
         self.running = False
+
+    async def drain_queue(self, batch_size: int = 20) -> int:
+        """
+        Non-blocking queue drain — pops up to batch_size items and processes them.
+        Used as a Starlette BackgroundTask in serverless mode (Vercel) so every
+        API request opportunistically drains the queue without a dedicated worker.
+        """
+        if not self.redis_client or not self.session_factory:
+            return 0
+        processed = 0
+        for _ in range(batch_size):
+            try:
+                log_json = await self.redis_client.rpop(self.queue_key)
+                if log_json is None:
+                    break
+                await self.process_log(log_json)
+                processed += 1
+            except Exception as e:
+                print(f"[IngestionWorker] drain_queue error: {e}")
+                break
+        return processed
 
 
 ingestion_worker = IngestionWorker()

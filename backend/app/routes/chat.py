@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -12,6 +12,7 @@ from app.models.schemas import Conversation, ChatMessage, ConversationStatus
 from app.models.pydantic_models import ChatRequest, ChatMessageResponse, ConversationResponse, ConversationListItem
 from app.sdk.llm_wrapper import llm_wrapper
 from app.services.pii_redactor import pii_redactor
+from app.services.ingestion_worker import ingestion_worker
 from app.config import get_settings
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -21,7 +22,7 @@ MAX_CONTEXT_MESSAGES = get_settings().max_context_messages
 
 
 @router.post("/send")
-async def send_message(request: ChatRequest, db: AsyncSession = Depends(get_db)):
+async def send_message(request: ChatRequest, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     """Send a message and get a response (non-streaming)."""
     # Get or create conversation
     conversation_id = request.conversation_id
@@ -78,6 +79,10 @@ async def send_message(request: ChatRequest, db: AsyncSession = Depends(get_db))
     )
     await db.commit()
 
+    # Serverless mode: drain the Redis queue as a background task (runs after response is sent)
+    if not get_settings().background_worker_enabled:
+        background_tasks.add_task(ingestion_worker.drain_queue, 20)
+
     return {
         "conversation_id": conversation_id,
         "message": ChatMessageResponse(
@@ -90,7 +95,7 @@ async def send_message(request: ChatRequest, db: AsyncSession = Depends(get_db))
 
 
 @router.post("/send/stream")
-async def send_message_stream(request: ChatRequest, db: AsyncSession = Depends(get_db)):
+async def send_message_stream(request: ChatRequest, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     """Send a message and get a streaming response."""
     # Get or create conversation
     conversation_id = request.conversation_id
@@ -146,6 +151,10 @@ async def send_message_stream(request: ChatRequest, db: AsyncSession = Depends(g
                 db.add(assistant_msg)
 
             yield f"data: {json.dumps({'done': True, 'conversation_id': conversation_id})}\n\n"
+
+            # Serverless: drain queue after stream completes
+            if not get_settings().background_worker_enabled:
+                await ingestion_worker.drain_queue(20)
 
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
