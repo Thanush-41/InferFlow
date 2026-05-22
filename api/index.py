@@ -4,12 +4,13 @@ Vercel Python serverless entry point.
 import sys
 import os
 import traceback
+from typing import Optional
 
 # Ensure the backend package is importable from the project root
 _backend_path = os.path.join(os.path.dirname(__file__), "..", "backend")
 sys.path.insert(0, _backend_path)
 
-_import_error: str | None = None
+_import_error: Optional[str] = None
 
 try:
     from mangum import Mangum
