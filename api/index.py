@@ -36,8 +36,6 @@ class handler(BaseHTTPRequestHandler):
         pass
 
     def _dispatch(self):
-        import traceback
-        print(f"[dispatch] START {self.command} {self.path}", flush=True)
         content_length = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(content_length) if content_length else b""
 
@@ -74,26 +72,19 @@ class handler(BaseHTTPRequestHandler):
             headers_holder.extend(response_headers)
 
         try:
-            print(f"[dispatch] calling wsgi_app", flush=True)
             result = _wsgi_app(environ, start_response)
 
             # a2wsgi returns a lazy generator; start_response is called while
             # iterating — so we must exhaust the body BEFORE reading status_holder.
-            print(f"[dispatch] consuming response body", flush=True)
             response_body = b"".join(chunk for chunk in result if chunk)
 
             status_code = int(status_holder[0].split(" ", 1)[0]) if status_holder else 500
-            print(f"[dispatch] status={status_code} body_len={len(response_body)} body={response_body[:200]!r}", flush=True)
-            print(f"[dispatch] resp_headers={headers_holder}", flush=True)
             self.send_response(status_code)
             for name, value in headers_holder:
                 self.send_header(name, value)
             self.end_headers()
             self.wfile.write(response_body)
-            print(f"[dispatch] DONE", flush=True)
         except Exception as exc:
-            print(f"[dispatch] EXCEPTION {type(exc).__name__}: {exc}", flush=True)
-            traceback.print_exc()
             import json
             payload = json.dumps({"error": str(exc)}).encode()
             self.send_response(500)

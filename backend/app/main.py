@@ -79,11 +79,4 @@ async def health():
     return {"status": "healthy", "service": "llm-inference-logger"}
 
 
-@app.exception_handler(Exception)
-async def global_exception_handler(request, exc):
-    import traceback
-    import sys
-    print(f"[UNHANDLED] {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
-    traceback.print_exc(file=sys.stderr)
-    from fastapi.responses import JSONResponse
-    return JSONResponse(status_code=500, content={"error": str(exc), "type": type(exc).__name__})
+
