@@ -2,13 +2,24 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import NullPool
 from app.config import get_settings
+import ssl
 
 settings = get_settings()
 
 # Serverless deployments (Vercel) need NullPool — no persistent connection pool
 # across function invocations. Docker/long-running use a standard pool.
-if settings.serverless_mode:
-    engine = create_async_engine(settings.database_url, echo=False, poolclass=NullPool)
+#
+# Managed Postgres (Neon, Supabase, RDS) needs:
+#   - ssl=require (TLS to the DB)
+#   - statement_cache_size=0 when using PgBouncer transaction-mode pooler
+if settings.serverless_mode or settings.database_ssl_require:
+    _ssl_ctx = ssl.create_default_context()
+    engine = create_async_engine(
+        settings.database_url,
+        echo=False,
+        poolclass=NullPool,
+        connect_args={"ssl": _ssl_ctx, "statement_cache_size": 0},
+    )
 else:
     engine = create_async_engine(
         settings.database_url,

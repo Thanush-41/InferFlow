@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     serverless_mode: bool = False
     # Set BACKGROUND_WORKER_ENABLED=false on Vercel (queue drained by cron instead)
     background_worker_enabled: bool = True
+    # Set DATABASE_SSL_REQUIRE=true for managed Postgres (Neon, Supabase, RDS, etc.)
+    # Also enables statement_cache_size=0 for PgBouncer transaction-mode pooler
+    database_ssl_require: bool = False
     # Secret for securing the /api/ingest/process-queue cron endpoint
     cron_secret: str = ""
 
