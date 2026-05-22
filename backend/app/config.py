@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 
 
@@ -41,8 +41,8 @@ class Settings(BaseSettings):
     # Secret for securing the /api/ingest/process-queue cron endpoint
     cron_secret: str = ""
 
-    class Config:
-        env_file = ".env"
+    # extra="ignore": unknown env vars (e.g. docker-compose vars from .env) are silently dropped
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 @lru_cache()
