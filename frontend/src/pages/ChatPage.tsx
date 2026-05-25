@@ -50,54 +50,20 @@ export default function ChatPage() {
     setStreamingContent('');
 
     try {
-      const response = await sendMessage(userMessage.content, conversationId || undefined, true);
+      // Non-streaming mode — works reliably in serverless (stream endpoint uses SSE
+      // which requires long-lived connections incompatible with Vercel's 10s limit)
+      const data = await sendMessage(userMessage.content, conversationId || undefined, false);
 
-      if (!response.ok) {
-        throw new Error('Failed to send message');
-      }
+      if (data.error) throw new Error(data.error);
+      if (data.detail) throw new Error(JSON.stringify(data.detail));
 
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let fullContent = '';
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const text = decoder.decode(value, { stream: true });
-          const lines = text.split('\n');
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.slice(6));
-                if (data.content) {
-                  fullContent += data.content;
-                  setStreamingContent(fullContent);
-                }
-                if (data.done) {
-                  setConversationId(data.conversation_id);
-                }
-                if (data.error) {
-                  throw new Error(data.error);
-                }
-              } catch (e) {
-                // Skip malformed JSON lines
-              }
-            }
-          }
-        }
-      }
-
-      if (fullContent) {
-        setMessages(prev => [...prev, {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: fullContent,
-          created_at: new Date().toISOString(),
-        }]);
-      }
+      setConversationId(data.conversation_id);
+      setMessages(prev => [...prev, {
+        id: data.message.id,
+        role: 'assistant',
+        content: data.message.content,
+        created_at: data.message.created_at,
+      }]);
     } catch (err: any) {
       if (err.name !== 'AbortError') {
         setMessages(prev => [...prev, {
