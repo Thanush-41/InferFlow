@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: inferflow-secrets
+  namespace: inferflow
+type: Opaque
+stringData:
+  GEMINI_API_KEY: "REPLACE_ME"
+  OPENAI_API_KEY: ""
+  DATABASE_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/inference_logs"
+  DATABASE_URL_SYNC: "postgresql://postgres:postgres@postgres:5432/inference_logs"
+  REDIS_URL: "redis://redis:6379/0"
+  POSTGRES_PASSWORD: "postgres"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inferflow-config
+  namespace: inferflow
+data:
+  APP_ENV: "production"
+  CORS_ORIGINS: "http://localhost:3000,https://inferflow.example.com"
+  DEFAULT_MODEL: "gemini-2.5-flash"
+  DEFAULT_PROVIDER: "gemini"
+  DEFAULT_OPENAI_MODEL: "gpt-4.1"
+  PREVIEW_MAX_LENGTH: "500"
+  REDIS_QUEUE_KEY: "inference_logs"
+  MAX_CONTEXT_MESSAGES: "20"
+  SERVERLESS_MODE: "false"
+  BACKGROUND_WORKER_ENABLED: "true"
+  DATABASE_SSL_REQUIRE: "false"

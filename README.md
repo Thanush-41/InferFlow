@@ -3,6 +3,8 @@
 A full-stack, production-ready inference logging and ingestion system for LLM applications.  
 Built with FastAPI · React · PostgreSQL · Redis · Nginx · Docker Compose.
 
+**Live Demo:** [https://full-stack-seven-kappa.vercel.app](https://full-stack-seven-kappa.vercel.app)
+
 ---
 
 ## Features
@@ -23,6 +25,7 @@ Built with FastAPI · React · PostgreSQL · Redis · Nginx · Docker Compose.
 | Event-based architecture | ✅ | Redis queue decouples logging from inference path |
 | PII redaction | ✅ | Regex-based — email, phone, SSN, credit card, IP, dates |
 | Cancel / List / Resume conversations | ✅ | Full conversation lifecycle in UI + API |
+| Self-hosted K8s deployment | ✅ | Full manifests in `k8s/` — Deployments, Services, HPA, Ingress |
 
 ---
 
@@ -81,6 +84,27 @@ cd frontend
 npm install
 npm run dev
 ```
+
+### Kubernetes (Self-Hosted)
+
+```bash
+# Prerequisites: kubectl configured, nginx-ingress-controller installed
+# 1. Edit k8s/config.yaml — set your GEMINI_API_KEY in the Secret
+
+# 2. Deploy all manifests
+chmod +x k8s/deploy.sh
+./k8s/deploy.sh
+
+# 3. Update DNS/hosts to point inferflow.example.com → your ingress IP
+```
+
+Manifests include:
+- **Namespace** isolation (`inferflow`)
+- **Postgres** with PVC for data persistence
+- **Redis** with memory limits
+- **Backend** (2 replicas) with readiness/liveness probes + HPA (auto-scales to 10 pods at 70% CPU)
+- **Frontend** (2 replicas) serving static build via Nginx
+- **Ingress** with TLS termination and path-based routing
 
 ---
 
@@ -272,7 +296,7 @@ Chat request
 
 ## What I Would Improve With More Time
 
-1. **Kubernetes manifests** — Helm chart with HPA for backend/worker; separate Deployment for ingestion worker
+1. **Helm chart** — Parameterized Helm chart for the K8s manifests; templated values for image tags, replicas, resource limits
 2. **Dead letter queue** — Failed log payloads moved to Redis DLQ for forensic review
 3. **Presidio NER for PII** — Entity recognition beyond regex; support for custom entity types
 4. **Authentication** — JWT/API-key middleware for multi-tenant deployments
