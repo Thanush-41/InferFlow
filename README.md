@@ -1,67 +1,109 @@
-# LLM Inference Logging & Ingestion System
+﻿# InferFlow — LLM Inference Logging & Ingestion System
 
-A full-stack, production-ready inference logging and ingestion system for LLM applications.  
-Built with FastAPI · React · PostgreSQL · Redis · Nginx · Docker Compose.
+A full-stack, production-ready system for logging, ingesting, and observing LLM inference calls.  
+Built with **FastAPI · React · PostgreSQL · Redis · Nginx · Docker Compose · Kubernetes**.
 
-**Live Demo:** [https://full-stack-seven-kappa.vercel.app](https://full-stack-seven-kappa.vercel.app)
+> **Live Demo:** [https://full-stack-seven-kappa.vercel.app](https://full-stack-seven-kappa.vercel.app)  
+> **GitHub:** [https://github.com/Thanush-41/InferFlow](https://github.com/Thanush-41/InferFlow)
 
 ---
 
-## Features
+## Feature Coverage
 
-| Requirement | Status | Detail |
+| Requirement | Status | Implementation |
 |---|---|---|
 | Multi-turn chatbot | ✅ | Gemini 2.5 Flash + OpenAI GPT-4.1 |
-| Conversational context | ✅ | Sliding window (configurable, default 20 msgs) |
-| Simple UI | ✅ | React + TailwindCSS |
-| Lightweight SDK wrapper | ✅ | Transparent instrumentation — latency, tokens, timestamps, status, previews |
-| Near real-time log ingestion | ✅ | Redis LPUSH → BRPOP pipeline |
-| Ingestion validation & parsing | ✅ | Pydantic-validated payloads |
-| PostgreSQL storage | ✅ | 3-table schema |
-| Multi-provider support | ✅ | Gemini, OpenAI — extensible base class |
-| Streaming responses | ✅ | Server-Sent Events (SSE) with TTFT tracking |
-| Latency / Throughput / Errors dashboards | ✅ | P95/P99 latency, RPM, error rate, per-provider stats |
-| Docker Compose one-command setup | ✅ | `docker-compose up --build` |
-| Event-based architecture | ✅ | Redis queue decouples logging from inference path |
-| PII redaction | ✅ | Regex-based — email, phone, SSN, credit card, IP, dates |
-| Cancel / List / Resume conversations | ✅ | Full conversation lifecycle in UI + API |
-| Self-hosted K8s deployment | ✅ | Full manifests in `k8s/` — Deployments, Services, HPA, Ingress |
+| Conversational context | ✅ | Sliding window — configurable, default 20 messages |
+| Simple UI | ✅ | React 18 + TypeScript + TailwindCSS |
+| Lightweight SDK wrapper | ✅ | Captures model, provider, latency, tokens, timestamps, status, previews, session ID |
+| Near real-time log ingestion | ✅ | Redis `LPUSH` → `BRPOP` pipeline — fire-and-forget, zero inference latency added |
+| Ingestion validation & parsing | ✅ | Pydantic-validated payloads; malformed logs dropped cleanly |
+| Database storage | ✅ | PostgreSQL 16 — 3-table normalised schema |
+| Multi-provider support | ✅ | Gemini, OpenAI — extensible `BaseLLMProvider` abstract class |
+| Streaming responses | ✅ | SSE endpoint with time-to-first-token (TTFT) tracking |
+| Latency / Throughput / Errors dashboards | ✅ | P95/P99 latency, RPM, error rate, per-provider breakdown, time-series charts |
+| Docker Compose one-command setup | ✅ | `docker-compose up --build` — 5 services, zero config |
+| Event-based architecture | ✅ | Redis queue fully decouples SDK log production from ingestion processing |
+| PII redaction | ✅ | Regex-based — email, phone, SSN, credit card, IP address, date of birth |
+| Cancel / List / Resume conversations | ✅ | Full lifecycle management in UI and API |
+| Self-hosted Kubernetes | ✅ | `k8s/` — Namespace, Deployments, Services, HPA, PVC, Ingress, deploy script |
+
+---
+
+## Architecture Overview
+
+```
++------------------------------------------------------------------+
+|                        Nginx  (port 80)                          |
+|            /  ->  frontend:3000       /api/  ->  backend:8000    |
++------------------+-----------------------------------+-----------+
+                   |                                   |
+       +-----------+-----------+           +-----------+-----------+
+       |     React Frontend    |           |     FastAPI Backend    |
+       |  Chat / Convs / Dash  |           |                       |
+       +-----------------------+           |  Chat API             |
+                                           |  Conversations API    |
+                                           |  Dashboard API        |
+                                           |  Ingestion API        |
+                                           |                       |
+                                           |  +------------------+ |
+                                           |  |   LLM Wrapper    | |
+                                           |  | Gemini / OpenAI  | |
+                                           |  | + Inference Log  | |
+                                           |  +--------+---------+ |
+                                           +-----------|-----------+
+                                                       | LPUSH (non-blocking)
+                                           +-----------+-----------+
+                                           |     Redis Queue       |
+                                           |  inference_logs list  |
+                                           +-----------+-----------+
+                                                       | BRPOP
+                                           +-----------+-----------+
+                                           |   Ingestion Worker    |
+                                           |  Validate (Pydantic)  |
+                                           |  PII Redact           |
+                                           |  Batch INSERT         |
+                                           +-----------+-----------+
+                                                       |
+                                           +-----------+-----------+
+                                           |     PostgreSQL 16     |
+                                           |  conversations        |
+                                           |  chat_messages        |
+                                           |  inference_logs       |
+                                           +-----------------------+
+```
 
 ---
 
 ## Quick Start
 
 ### Prerequisites
+- **Docker Desktop >= 4.x** with Compose v2
+- **Gemini API key** — [get one free](https://aistudio.google.com/app/apikey)
 
-- **Docker & Docker Compose** (Docker Desktop ≥ 4.x)
-- **Gemini API key** ([get one free](https://aistudio.google.com/app/apikey))
-
-### One-Command Setup
+### One-Command Setup (Docker)
 
 ```bash
-# 1. Clone and configure
-git clone <repo-url>
-cd full-stack
+# 1. Clone
+git clone https://github.com/Thanush-41/InferFlow.git
+cd InferFlow
+
+# 2. Configure — minimum required:
 cp .env.example .env
-```
+#   GEMINI_API_KEY=your-key-here
+#   POSTGRES_PASSWORD=your-secure-password
 
-Edit `.env` — at minimum set:
-```env
-GEMINI_API_KEY=your-key-here
-POSTGRES_PASSWORD=your-secure-password
-```
-
-```bash
-# 2. Start all 5 services
+# 3. Start all 5 services
 docker-compose up --build
-
-# 3. Open in browser
-# Full app (via nginx):  http://localhost:80
-# Backend API + Swagger: http://localhost:8000/docs
-# Frontend direct:       http://localhost:3000
 ```
 
-> **Port conflicts?** Override any host port in `.env` — no compose file edits needed:
+| Service | URL |
+|---|---|
+| Full app (via Nginx) | http://localhost |
+| Backend API + Swagger | http://localhost:8000/docs |
+| Frontend (direct) | http://localhost:3000 |
+
+> **Port conflict?** Override any port in `.env` without editing compose files:
 > ```env
 > BACKEND_PORT=8001
 > FRONTEND_PORT=3001
@@ -73,470 +115,214 @@ docker-compose up --build
 ### Local Development (without Docker)
 
 ```bash
-# Backend
+# Terminal 1 — Backend
 cd backend
-python -m venv .venv && source .venv/bin/activate   # or .venv\Scripts\activate on Windows
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 
-# Frontend
+# Terminal 2 — Frontend
 cd frontend
 npm install
-npm run dev
+npm run dev                      # -> http://localhost:5173
 ```
 
 ### Kubernetes (Self-Hosted)
 
 ```bash
-# Prerequisites: kubectl configured, nginx-ingress-controller installed
-# 1. Edit k8s/config.yaml — set your GEMINI_API_KEY in the Secret
+# Prerequisites: kubectl configured, nginx-ingress-controller installed on cluster
 
-# 2. Deploy all manifests
+# 1. Set your secrets
+#    Edit k8s/config.yaml -> replace GEMINI_API_KEY placeholder in the Secret
+
+# 2. One-command deploy
 chmod +x k8s/deploy.sh
 ./k8s/deploy.sh
 
-# 3. Update DNS/hosts to point inferflow.example.com → your ingress IP
+# 3. Point DNS: inferflow.example.com -> your cluster ingress IP
 ```
 
-Manifests include:
-- **Namespace** isolation (`inferflow`)
-- **Postgres** with PVC for data persistence
-- **Redis** with memory limits
-- **Backend** (2 replicas) with readiness/liveness probes + HPA (auto-scales to 10 pods at 70% CPU)
-- **Frontend** (2 replicas) serving static build via Nginx
-- **Ingress** with TLS termination and path-based routing
+The `k8s/` directory contains:
+
+| File | Purpose |
+|---|---|
+| `namespace.yaml` | `inferflow` namespace isolation |
+| `config.yaml` | Kubernetes Secret + ConfigMap for all env vars |
+| `postgres.yaml` | PostgreSQL Deployment + Service + 5 Gi PVC |
+| `redis.yaml` | Redis Deployment + Service with memory limits |
+| `backend.yaml` | Backend Deployment (2 replicas) + Service + HPA (2-10 pods at 70% CPU) |
+| `frontend.yaml` | Frontend Deployment (2 replicas) + Service |
+| `ingress.yaml` | Nginx Ingress — path routing, TLS termination |
+| `deploy.sh` | Orchestrated deploy script with readiness waits |
 
 ---
 
-## Architecture Overview
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                     Nginx (port 80)                     │
-│          /  → frontend:3000    /api/ → backend:8000     │
-└───────────────────┬──────────────────────┬──────────────┘
-                    │                      │
-        ┌───────────▼──────────┐   ┌──────▼──────────────┐
-        │   React Frontend     │   │   FastAPI Backend    │
-        │  Chat · Convs · Dash │   │                      │
-        └──────────────────────┘   │  ┌───────────────┐   │
-                                   │  │  Chat API      │   │
-                                   │  │  Convs API     │   │
-                                   │  │  Dashboard API │   │
-                                   │  │  Ingest API    │   │
-                                   │  └──────┬────────┘   │
-                                   │         │             │
-                                   │  ┌──────▼────────┐   │
-                                   │  │  LLM Wrapper  │   │
-                                   │  │  (SDK)        │   │
-                                   │  │  + Logger     │   │
-                                   │  └──────┬────────┘   │
-                                   └─────────┼─────────────┘
-                                             │ fire-and-forget
-                                   ┌─────────▼─────────┐
-                                   │   Redis Queue     │
-                                   │  (LPUSH / BRPOP)  │
-                                   └─────────┬─────────┘
-                                             │
-                                   ┌─────────▼─────────┐
-                                   │ Ingestion Worker  │
-                                   │  Validate (Pydantic)│
-                                   │  PII Redact       │
-                                   │  Store            │
-                                   └─────────┬─────────┘
-                                             │
-                                   ┌─────────▼─────────┐
-                                   │   PostgreSQL 16   │
-                                   │  conversations    │
-                                   │  chat_messages    │
-                                   │  inference_logs   │
-                                   └───────────────────┘
-```
-
----
-
-## Configuration
-
-All settings are driven by environment variables — nothing is hardcoded in source.
-
-| Variable | Default | Description |
-|---|---|---|
-| `GEMINI_API_KEY` | *(required)* | Gemini API key |
-| `OPENAI_API_KEY` | *(optional)* | OpenAI API key |
-| `DATABASE_URL` | *(required)* | asyncpg DSN |
-| `REDIS_URL` | *(required)* | Redis DSN |
-| `POSTGRES_PASSWORD` | *(required)* | DB password |
-| `CORS_ORIGINS` | `http://localhost:3000,...` | Comma-separated allowed origins |
-| `DEFAULT_MODEL` | `gemini-2.5-flash` | Default LLM model |
-| `DEFAULT_PROVIDER` | `gemini` | Default LLM provider |
-| `DEFAULT_OPENAI_MODEL` | `gpt-4.1` | Default OpenAI model |
-| `PREVIEW_MAX_LENGTH` | `500` | Max chars stored for input/output previews |
-| `REDIS_QUEUE_KEY` | `inference_logs` | Redis list key for the log queue |
-| `MAX_CONTEXT_MESSAGES` | `20` | Sliding context window size |
-| `BACKEND_PORT` | `8000` | Host port for the backend |
-| `FRONTEND_PORT` | `3000` | Host port for the frontend |
-| `POSTGRES_PORT` | `5432` | Host port for PostgreSQL |
-| `REDIS_PORT` | `6379` | Host port for Redis |
-| `NGINX_PORT` | `80` | Host port for Nginx |
-
----
-
-## Schema Design
+## Database Schema
 
 ### `conversations`
+
 | Column | Type | Notes |
 |---|---|---|
-| id | VARCHAR(36) | UUID primary key |
-| title | VARCHAR(255) | Auto-set from first message (first 50 chars) |
-| status | VARCHAR(20) | `active` · `cancelled` · `completed` |
-| created_at | TIMESTAMP | — |
-| updated_at | TIMESTAMP | Auto-updated on change |
+| `id` | VARCHAR(36) | UUID primary key |
+| `title` | VARCHAR(255) | Auto-set from first 50 chars of first message |
+| `status` | VARCHAR(20) | `active` / `cancelled` / `completed` |
+| `created_at` | TIMESTAMP | — |
+| `updated_at` | TIMESTAMP | Updated on every message |
 
 ### `chat_messages`
+
 | Column | Type | Notes |
 |---|---|---|
-| id | VARCHAR(36) | UUID PK |
-| conversation_id | VARCHAR(36) FK | Indexed |
-| role | VARCHAR(20) | `user` · `assistant` · `system` |
-| content | TEXT | Raw message |
-| content_redacted | TEXT | PII-redacted copy |
-| created_at | TIMESTAMP | — |
+| `id` | VARCHAR(36) | UUID PK |
+| `conversation_id` | VARCHAR(36) FK | Indexed |
+| `role` | VARCHAR(20) | `user` / `assistant` / `system` |
+| `content` | TEXT | Raw message — kept for debugging |
+| `content_redacted` | TEXT | PII-scrubbed copy — what is audited |
+| `created_at` | TIMESTAMP | — |
 
 ### `inference_logs`
+
 | Column | Type | Notes |
 |---|---|---|
-| id | VARCHAR(36) | UUID PK |
-| conversation_id | VARCHAR(36) FK | Indexed |
-| request_id | VARCHAR(36) | Unique per LLM call |
-| model | VARCHAR(100) | e.g. `gemini-2.5-flash` |
-| provider | VARCHAR(50) | `gemini` · `openai` |
-| request_timestamp | TIMESTAMP | When request was sent |
-| response_timestamp | TIMESTAMP | When response completed |
-| latency_ms | FLOAT | End-to-end latency |
-| input_tokens | INT | Prompt token count |
-| output_tokens | INT | Completion token count |
-| total_tokens | INT | Total token usage |
-| status | VARCHAR(20) | `success` · `error` |
-| error_message | TEXT | Error details (nullable) |
-| input_preview | TEXT | Truncated, PII-redacted input |
-| output_preview | TEXT | Truncated, PII-redacted output |
-| is_streaming | BOOLEAN | Whether SSE was used |
-| time_to_first_token_ms | FLOAT | TTFT for streaming calls |
-| extra_metadata | JSON | Extensible catch-all |
+| `id` | VARCHAR(36) | UUID PK |
+| `conversation_id` | VARCHAR(36) FK | Indexed |
+| `request_id` | VARCHAR(36) | Unique per LLM call, not per message |
+| `model` | VARCHAR(100) | e.g. `gemini-2.5-flash` |
+| `provider` | VARCHAR(50) | `gemini` / `openai` |
+| `request_timestamp` | TIMESTAMP | When call was initiated |
+| `response_timestamp` | TIMESTAMP | When response completed |
+| `latency_ms` | FLOAT | End-to-end wall-clock latency |
+| `input_tokens` | INT | Prompt token count |
+| `output_tokens` | INT | Completion token count |
+| `total_tokens` | INT | Combined total |
+| `status` | VARCHAR(20) | `success` / `error` |
+| `error_message` | TEXT | Populated on failure, null otherwise |
+| `input_preview` | TEXT | First 500 chars, PII-redacted |
+| `output_preview` | TEXT | First 500 chars, PII-redacted |
+| `is_streaming` | BOOLEAN | True when SSE was used |
+| `time_to_first_token_ms` | FLOAT | TTFT — streaming only |
+| `extra_metadata` | JSON | Extensible catch-all for future fields |
 
-**Design decisions:**
-- `extra_metadata` (not `metadata`) — SQLAlchemy reserves the `metadata` attribute name; renamed to avoid `InvalidRequestError` at startup
-- Separate `content_redacted` alongside `content` — preserves raw message for debugging while storing scrubbed version for auditing
-- `request_id` is unique per LLM call (not per message) — supports batch/multi-call patterns
+**Key schema decisions:**
+
+- **`extra_metadata` not `metadata`** — SQLAlchemy reserves `metadata` on every mapped class; using the standard name raises `InvalidRequestError` at startup.
+- **`content` + `content_redacted` side-by-side** — preserves raw messages for internal debugging while the audited path always reads the scrubbed column.
+- **`request_id` separate from message ID** — a single assistant turn may produce multiple LLM calls (retries, tool use). Tracking them separately is more accurate.
+- **No DB-level foreign key constraints** — avoids cascading delete issues across async sessions; referential integrity is enforced at the application layer.
 
 ---
 
-## Architecture Notes
+## Configuration Reference
 
-### Ingestion Flow
+All config is driven by environment variables — nothing is hardcoded in source.
 
-```
-Chat request
-  → Chat API creates/loads conversation
-  → LLM Wrapper calls provider (Gemini/OpenAI)
-  → SDK Logger.start_request() records timestamp + request ID
-  → Response / stream returned to user immediately
-  → SDK Logger.end_request() calculates latency, truncates previews, builds payload
-  → Redis LPUSH (O(1), non-blocking, fire-and-forget)
-  → Ingestion Worker (BRPOP, runs in-process as asyncio task)
-     → Pydantic validates payload
-     → PII redactor scrubs previews
-     → INSERT into inference_logs
-```
-
-### Logging Strategy
-
-- **Non-blocking**: `LPUSH` is O(1); logging never adds latency to the user-facing response
-- **At-least-once delivery**: Redis queue survives transient backend restarts; items remain until consumed
-- **Structured payloads**: Pydantic validates every log before storage — malformed logs are dropped with error logging rather than crashing the worker
-- **Truncated previews**: Input/output stored up to `PREVIEW_MAX_LENGTH` chars (default 500) — balances debuggability vs storage
-- **PII before persistence**: Redaction happens in the worker, not the LLM path — redacted version goes to DB, raw version is never persisted
-
-### Scaling Considerations
-
-| Layer | Current | Path to Scale |
-|---|---|---|
-| Backend | Single process | Stateless FastAPI → horizontal scale behind load balancer |
-| Ingestion Worker | In-process asyncio task | Extract to separate container; multiple workers share one Redis queue |
-| Redis Queue | Single node | Redis Cluster or AWS ElastiCache for HA |
-| PostgreSQL | Single node | Read replicas for dashboard; TimescaleDB hypertables for time-series at high volume |
-| Streaming | SSE per connection | WebSocket pool or managed streaming for >10k concurrent streams |
-
-### Failure Handling
-
-| Failure | Behavior |
-|---|---|
-| LLM API error | Caught in wrapper → `status=error` logged → HTTP 500 returned to user |
-| Redis unavailable | Logger silently swallows exception → inference succeeds, log is lost (acceptable) |
-| Worker crashes | Unprocessed items remain in Redis queue → picked up on restart |
-| Database unavailable | Worker retries with 0.5s backoff; queue acts as durable buffer |
-| Invalid log payload | Pydantic validation error → log dropped, error printed → worker continues |
-| Client disconnects mid-stream | Partial content saved; conversation can be resumed |
+| Variable | Default | Required | Description |
+|---|---|---|---|
+| `GEMINI_API_KEY` | — | Yes | Gemini API key |
+| `OPENAI_API_KEY` | — | No | OpenAI API key (optional provider) |
+| `DATABASE_URL` | — | Yes | asyncpg DSN for async SQLAlchemy |
+| `DATABASE_URL_SYNC` | — | Yes | psycopg2 DSN (used by Alembic) |
+| `REDIS_URL` | — | Yes | Redis DSN (`redis://` or `rediss://`) |
+| `POSTGRES_PASSWORD` | — | Yes | PostgreSQL password |
+| `APP_ENV` | `development` | No | `development` / `production` |
+| `CORS_ORIGINS` | `http://localhost:3000,...` | No | Comma-separated allowed origins |
+| `DEFAULT_MODEL` | `gemini-2.5-flash` | No | Default LLM model |
+| `DEFAULT_PROVIDER` | `gemini` | No | Default LLM provider |
+| `DEFAULT_OPENAI_MODEL` | `gpt-4.1` | No | Default OpenAI model |
+| `PREVIEW_MAX_LENGTH` | `500` | No | Max chars for input/output previews |
+| `REDIS_QUEUE_KEY` | `inference_logs` | No | Redis list key for the log queue |
+| `MAX_CONTEXT_MESSAGES` | `20` | No | Sliding context window size |
+| `SERVERLESS_MODE` | `false` | No | Disables background worker (Vercel) |
+| `BACKGROUND_WORKER_ENABLED` | `true` | No | Toggle in-process ingestion worker |
+| `BACKEND_PORT` | `8000` | No | Host port mapped to backend container |
+| `FRONTEND_PORT` | `3000` | No | Host port mapped to frontend container |
+| `POSTGRES_PORT` | `5432` | No | Host port mapped to PostgreSQL |
+| `REDIS_PORT` | `6379` | No | Host port mapped to Redis |
+| `NGINX_PORT` | `80` | No | Host port mapped to Nginx |
 
 ---
 
 ## Tradeoffs
 
-| Decision | Tradeoff |
-|---|---|
-| Redis queue vs. synchronous DB write | Adds one infrastructure component; eliminates logging latency from hot path |
-| Regex PII vs. Presidio/spaCy NER | Fast zero-overhead startup, no ML models; lower recall on edge cases |
-| Single in-process worker | Simpler deployment; for production, separate worker container for independent scaling |
-| PostgreSQL for time-series | General-purpose, no extra ops; TimescaleDB partitioning needed above ~10M rows/day |
-| Truncated previews | Saves storage; loses full context — supplement with separate trace store if needed |
-| SSE over WebSocket | Simpler browser/server contract for unidirectional streaming; sufficient for chat |
-| Pydantic-settings for config | All settings validated at startup with types — bad config fails fast rather than silently |
+| Decision | Why | Cost |
+|---|---|---|
+| Redis queue over synchronous DB write | Logging never adds latency to inference path | One extra infrastructure component |
+| In-process ingestion worker | Simpler deployment, no extra container | Worker and API share CPU/memory; extract to own pod for production scale |
+| Regex PII redaction over Presidio/spaCy | Zero startup overhead, no ML models to ship | Lower recall on edge cases (e.g. names) |
+| PostgreSQL over time-series DB | Familiar ops, single DB to manage | Needs TimescaleDB hypertables or partitioning above ~10M rows/day |
+| Truncated previews (500 chars) | Keeps storage predictable | Full prompt/completion not stored — supplement with a trace store if needed |
+| SSE over WebSocket | Simpler browser contract for unidirectional streaming | Not suitable for very high concurrency (>10k streams) |
+| `pydantic-settings` with `extra="ignore"` | Same `.env` works for Docker and serverless without validation errors | Unknown env vars silently ignored rather than failing loudly |
 
 ---
 
 ## What I Would Improve With More Time
 
-1. **Helm chart** — Parameterized Helm chart for the K8s manifests; templated values for image tags, replicas, resource limits
-2. **Dead letter queue** — Failed log payloads moved to Redis DLQ for forensic review
-3. **Presidio NER for PII** — Entity recognition beyond regex; support for custom entity types
-4. **Authentication** — JWT/API-key middleware for multi-tenant deployments
-5. **Rate limiting** — Per-conversation and per-IP throttling with Redis token bucket
-6. **Observability** — OpenTelemetry traces, Prometheus `/metrics` endpoint, Grafana dashboard
-7. **Log retention policies** — Configurable TTL; archive to S3-compatible storage
-8. **Alembic migrations** — Version-controlled schema migrations instead of `create_all()`
-9. **Integration test suite** — Full pipeline tests with testcontainers (Postgres + Redis in CI)
-10. **Streaming cancel propagation** — Cancel signal sent to active LLM stream via asyncio event
+1. **Helm chart** — Parameterise the K8s manifests; template image tags, replica counts, resource limits
+2. **Separate ingestion worker Deployment** — Independent scaling from the API; own resource limits
+3. **Dead-letter queue** — Failed log payloads pushed to a Redis DLQ for forensic replay
+4. **Presidio NER for PII** — ML-based entity recognition; higher recall, custom entity types
+5. **Alembic migrations** — Version-controlled schema changes instead of `create_all()` on startup
+6. **Authentication** — JWT / API-key middleware for multi-tenant isolation
+7. **OpenTelemetry + Prometheus** — Distributed traces, `/metrics` scrape endpoint, Grafana dashboard
+8. **Log retention policies** — Configurable TTL with archival to S3-compatible object storage
+9. **Integration test suite** — Full pipeline tests using `testcontainers` (Postgres + Redis in CI)
+10. **Streaming cancel propagation** — Forward cancel signal to the active LLM stream via `asyncio.Event`
 
 ---
 
 ## API Reference
 
+### Chat
+
 | Method | Path | Description |
 |---|---|---|
-| POST | `/api/chat/send` | Send message, receive full response |
-| POST | `/api/chat/send/stream` | Send message, receive SSE stream |
-| GET | `/api/conversations/` | List conversations (filterable by status) |
-| GET | `/api/conversations/:id` | Get conversation + messages |
-| POST | `/api/conversations/:id/cancel` | Cancel conversation |
-| POST | `/api/conversations/:id/resume` | Resume cancelled conversation |
-| DELETE | `/api/conversations/:id` | Delete conversation |
-| POST | `/api/ingest/logs` | Direct single-log ingestion |
-| POST | `/api/ingest/logs/batch` | Batch log ingestion |
-| GET | `/api/ingest/queue/status` | Redis queue depth |
-| GET | `/api/dashboard/metrics` | Aggregate metrics (total reqs, avg/P95/P99 latency, error rate, RPM) |
-| GET | `/api/dashboard/latency` | Latency time-series buckets |
-| GET | `/api/dashboard/throughput` | Throughput time-series buckets |
-| GET | `/api/dashboard/errors` | Recent error log entries |
-| GET | `/api/dashboard/providers` | Per-provider breakdown |
-| GET | `/health` | Health check |
+| `POST` | `/api/chat/send` | Send message, receive full JSON response |
+| `POST` | `/api/chat/send/stream` | Send message, receive SSE stream |
+
+### Conversations
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/conversations/` | List all conversations (filter by `?status=`) |
+| `GET` | `/api/conversations/:id` | Get conversation with full message history |
+| `POST` | `/api/conversations/:id/cancel` | Mark conversation as cancelled |
+| `POST` | `/api/conversations/:id/resume` | Reactivate a cancelled conversation |
+| `DELETE` | `/api/conversations/:id` | Permanently delete conversation |
+
+### Ingestion
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/ingest/logs` | Direct single-log ingestion |
+| `POST` | `/api/ingest/logs/batch` | Batch log ingestion (up to 100 items) |
+| `GET` | `/api/ingest/queue/status` | Redis queue depth and worker status |
+
+### Dashboard
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/dashboard/metrics` | Aggregate stats — total requests, avg/P95/P99 latency, error rate, RPM, tokens |
+| `GET` | `/api/dashboard/latency` | Latency time-series in 5-minute buckets |
+| `GET` | `/api/dashboard/throughput` | Request throughput in 5-minute buckets |
+| `GET` | `/api/dashboard/errors` | Recent error log entries |
+| `GET` | `/api/dashboard/providers` | Per-provider breakdown |
+| `GET` | `/health` | Health check |
+
+All dashboard endpoints accept an optional `?hours=N` query param (default: 24).
 
 ---
 
 ## Tech Stack
 
-- **Backend**: Python 3.11, FastAPI 0.115, SQLAlchemy 2.0 (async), Pydantic 2.9, asyncpg
-- **LLM SDKs**: `google-genai` 1.14 (new Client API), `openai` 1.51
-- **Event Queue**: Redis 7 (`redis[hiredis]` 5.1)
-- **Database**: PostgreSQL 16
-- **Frontend**: React 18, TypeScript, Vite 5, TailwindCSS
-- **Proxy**: Nginx 1.27
-- **Containerisation**: Docker Compose v2
-
-
-## Features
-
-- **Multi-turn Chatbot** with streaming responses (Gemini, OpenAI)
-- **Lightweight SDK** that transparently captures inference metadata
-- **Event-based Ingestion Pipeline** via Redis queue
-- **Real-time Dashboard** with latency, throughput, and error metrics
-- **PII Redaction** on stored messages
-- **Multi-provider Support** (Gemini, OpenAI — extensible)
-- **Conversation Management** (list, cancel, resume)
-- **Docker Compose** one-command setup
-
-## Architecture Overview
-
-```
-┌─────────────┐     ┌──────────────────────────────────────┐
-│   React UI  │────▶│         FastAPI Backend               │
-│  (Vite/TS)  │◀────│                                      │
-└─────────────┘     │  ┌─────────────┐  ┌──────────────┐  │
-                    │  │  Chat API   │  │ Dashboard API │  │
-                    │  └──────┬──────┘  └──────────────┘  │
-                    │         │                             │
-                    │  ┌──────▼──────┐                     │
-                    │  │ LLM Wrapper │ (SDK)                │
-                    │  │  + Logger   │                      │
-                    │  └──────┬──────┘                     │
-                    │         │                             │
-                    └─────────┼─────────────────────────────┘
-                              │ (async event)
-                    ┌─────────▼─────────┐
-                    │   Redis Queue     │
-                    └─────────┬─────────┘
-                              │
-                    ┌─────────▼─────────┐
-                    │ Ingestion Worker  │
-                    │  - Validate       │
-                    │  - PII Redact     │
-                    │  - Store          │
-                    └─────────┬─────────┘
-                              │
-                    ┌─────────▼─────────┐
-                    │   PostgreSQL      │
-                    │  - conversations  │
-                    │  - chat_messages  │
-                    │  - inference_logs │
-                    └───────────────────┘
-```
-
-## Quick Start
-
-### Prerequisites
-- Docker & Docker Compose
-- A Gemini API key
-
-### One-Command Setup
-
-```bash
-# 1. Clone and configure
-cp .env.example .env
-# Edit .env and add your GEMINI_API_KEY
-
-# 2. Start everything
-docker-compose up --build
-
-# 3. Open browser
-# Frontend: http://localhost:3000
-# Backend API: http://localhost:8000/docs
-# Full app (nginx): http://localhost
-```
-
-## Schema Design
-
-### conversations
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID | Primary key |
-| title | VARCHAR(255) | Auto-generated from first message |
-| status | ENUM | active, cancelled, completed |
-| created_at | TIMESTAMP | Creation time |
-| updated_at | TIMESTAMP | Last activity |
-
-### chat_messages
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID | Primary key |
-| conversation_id | UUID FK | Links to conversation |
-| role | VARCHAR | user, assistant, system |
-| content | TEXT | Raw message content |
-| content_redacted | TEXT | PII-redacted version |
-| created_at | TIMESTAMP | Message timestamp |
-
-### inference_logs
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID | Primary key |
-| conversation_id | UUID FK | Links to conversation |
-| request_id | UUID | Unique per LLM call |
-| model | VARCHAR | Model name (e.g., gemini-2.0-flash) |
-| provider | VARCHAR | Provider (gemini, openai) |
-| request_timestamp | TIMESTAMP | When request was sent |
-| response_timestamp | TIMESTAMP | When response completed |
-| latency_ms | FLOAT | End-to-end latency |
-| input_tokens | INT | Prompt tokens |
-| output_tokens | INT | Completion tokens |
-| total_tokens | INT | Total token usage |
-| status | VARCHAR | success, error, cancelled |
-| error_message | TEXT | Error details if failed |
-| input_preview | TEXT | Truncated input (PII-redacted) |
-| output_preview | TEXT | Truncated output (PII-redacted) |
-| is_streaming | BOOLEAN | Whether streaming was used |
-| time_to_first_token_ms | FLOAT | TTFT for streaming |
-| metadata | JSON | Extensible metadata |
-
-## Architecture Notes
-
-### Ingestion Flow
-1. User sends message → Chat API handles request
-2. LLM Wrapper calls provider (Gemini/OpenAI) and instruments the call
-3. SDK Logger captures timing, tokens, status metadata
-4. Logger pushes structured log to Redis queue (fire-and-forget, non-blocking)
-5. Ingestion Worker consumes from queue via BRPOP
-6. Worker validates payload, applies PII redaction, stores to PostgreSQL
-7. Dashboard API queries PostgreSQL for aggregated metrics
-
-### Logging Strategy
-- **Non-blocking**: Logging never slows down the inference path. Redis LPUSH is O(1).
-- **At-least-once delivery**: Redis queue ensures logs aren't lost during transient failures
-- **Structured payloads**: Pydantic validates all log entries before storage
-- **Truncated previews**: Input/output stored as truncated previews (500 chars max) to manage storage
-- **PII Redaction**: Applied before persistence — emails, phones, SSNs, credit cards are scrubbed
-
-### Scaling Considerations
-- **Horizontal scaling**: Backend is stateless — scale behind load balancer
-- **Worker scaling**: Multiple ingestion workers can consume from the same Redis queue
-- **Database**: PostgreSQL handles moderate load; for high volume, consider TimescaleDB for time-series queries or partition by date
-- **Redis**: Can be clustered for high throughput; queue depth monitoring available via `/api/ingest/queue/status`
-- **Streaming**: SSE keeps connections lightweight; for massive concurrent streams, consider WebSocket pooling
-
-### Failure Handling
-- **LLM call failure**: Error is logged to inference_logs with status="error", error returned to user
-- **Redis unavailable**: Logger catches exceptions silently — inference continues, log is lost (acceptable tradeoff)
-- **Worker crash**: Unprocessed items remain in Redis queue, picked up on restart
-- **Database unavailable**: Worker retries with backoff; queue acts as buffer
-- **Frontend disconnect during stream**: Partial response saved, conversation can be resumed
-
-## Tradeoffs Made
-
-| Decision | Tradeoff |
-|----------|----------|
-| Redis queue vs. direct DB write | Adds infrastructure but decouples logging from inference path |
-| Regex PII redaction vs. Presidio NER | Less accurate but zero ML model overhead, faster startup |
-| Single worker in-process | Simpler deployment; for production, separate worker process |
-| PostgreSQL for logs | Good enough for moderate scale; TimescaleDB for high-volume |
-| Truncated previews (500 chars) | Saves storage but loses full context for debugging |
-| SSE over WebSocket | Simpler, sufficient for chat streaming, less client complexity |
-
-## What I Would Improve With More Time
-
-1. **Separate worker process** — Run ingestion worker as independent service for true horizontal scaling
-2. **Dead letter queue** — Failed log processing should go to DLQ for investigation
-3. **Presidio NER for PII** — Better entity recognition than regex patterns
-4. **Rate limiting** — Per-user/per-conversation rate limits on the API
-5. **Authentication** — JWT-based auth for multi-tenant support
-6. **Observability** — OpenTelemetry traces, Prometheus metrics, Grafana dashboards
-7. **Log retention policies** — Auto-archive/delete old logs based on configurable TTL
-8. **Batch token counting** — Pre-compute token counts client-side for budget tracking
-9. **Kubernetes manifests** — Helm charts for k8s deployment with HPA
-10. **Integration tests** — Full pipeline tests with testcontainers
-
-## API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | /api/chat/send | Send message (non-streaming) |
-| POST | /api/chat/send/stream | Send message (streaming SSE) |
-| GET | /api/conversations/ | List conversations |
-| GET | /api/conversations/:id | Get conversation + messages |
-| POST | /api/conversations/:id/cancel | Cancel conversation |
-| POST | /api/conversations/:id/resume | Resume conversation |
-| DELETE | /api/conversations/:id | Delete conversation |
-| POST | /api/ingest/logs | Direct log ingestion |
-| POST | /api/ingest/logs/batch | Batch log ingestion |
-| GET | /api/ingest/queue/status | Queue depth |
-| GET | /api/dashboard/metrics | Aggregate metrics |
-| GET | /api/dashboard/latency | Latency time series |
-| GET | /api/dashboard/throughput | Throughput time series |
-| GET | /api/dashboard/errors | Recent errors |
-| GET | /api/dashboard/providers | Per-provider stats |
-| GET | /health | Health check |
-
-## Tech Stack
-
-- **Backend**: Python 3.11, FastAPI, SQLAlchemy (async), Pydantic
-- **Frontend**: React 18, TypeScript, Vite, TailwindCSS
-- **Database**: PostgreSQL 16
-- **Queue**: Redis 7
-- **Proxy**: Nginx
-- **Containerization**: Docker Compose
+| Layer | Technology |
+|---|---|
+| Backend API | Python 3.11 · FastAPI 0.115 · SQLAlchemy 2.0 (async) · Pydantic 2.9 |
+| LLM SDKs | `google-genai` 1.14 (new async Client API) · `openai` 1.51 |
+| Event Queue | Redis 7 · `redis[hiredis]` 5.1 |
+| Database | PostgreSQL 16 · asyncpg 0.29 |
+| Frontend | React 18 · TypeScript · Vite 5 · TailwindCSS · Lucide icons |
+| Proxy | Nginx 1.27 |
+| Containers | Docker Compose v2 · Kubernetes 1.28+ |
+| Deployment | Vercel (serverless) · self-hosted K8s |
